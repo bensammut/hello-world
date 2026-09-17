@@ -1,31 +1,231 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hello</title>
-  <style>
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      background: #000;
-      color: #fff;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    }
-    h1 {
-      margin: 0;
-      padding: 0 5vw;
-      font-size: clamp(3rem, 14vw, 12rem);
-      font-weight: 700;
-      line-height: 1.05;
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hello</title>
+<style>
+  :root {
+    --cell: clamp(5px, 1.55vw, 18px);
+    --dim: #808080;
+    --hot: #ffffff;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: #000;
+    color: var(--hot);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--cell) * 3);
+    overflow: hidden;
+    cursor: crosshair;
+  }
+  #lines { display: flex; flex-direction: column; align-items: center; gap: calc(var(--cell) * 2); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(var(--cols), var(--cell));
+    grid-auto-rows: var(--cell);
+  }
+  .cell {
+    position: relative;
+    display: grid;
+    place-items: center;
+    line-height: 1;
+    will-change: transform;
+    transform: scale(calc(1 + var(--t, 0) * 0.85));
+    transition: transform .45s cubic-bezier(.2,.8,.3,1);
+  }
+  .cell i {
+    grid-area: 1 / 1;
+    font-style: normal;
+    transition: opacity .35s ease, color .35s ease;
+  }
+  .sym {
+    font-family: Wingdings, "Wingdings 2", "Zapf Dingbats", sans-serif;
+    font-size: calc(var(--cell) * 1.05);
+    color: var(--dim);
+    opacity: 1;
+  }
+  .ltr {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: calc(var(--cell) * 0.9);
+    font-weight: 700;
+    color: var(--hot);
+    opacity: 0;
+  }
+  .cell.on .sym { opacity: 0; }
+  .cell.on .ltr { opacity: 1; text-shadow: 0 0 calc(var(--cell) * 1.2) rgba(255,255,255,.55); }
+  #hint {
+    margin: 0;
+    font-size: clamp(10px, 1.1vw, 13px);
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: #3a3a3a;
+    transition: opacity .8s ease;
+  }
+  #hint.gone { opacity: 0; }
+</style>
 </head>
 <body>
-  <h1>Hello, Ben Sammut</h1>
+  <div id="lines"></div>
+  <p id="hint">hover the letters</p>
+
+<script>
+(function () {
+  // 5x7 bitmap font — only the characters this page needs.
+  var FONT = {
+    'H': ['#...#','#...#','#...#','#####','#...#','#...#','#...#'],
+    'E': ['#####','#....','#....','####.','#....','#....','#####'],
+    'L': ['#....','#....','#....','#....','#....','#....','#####'],
+    'O': ['.###.','#...#','#...#','#...#','#...#','#...#','.###.'],
+    'B': ['####.','#...#','#...#','####.','#...#','#...#','####.'],
+    'N': ['#...#','##..#','#.#.#','#.#.#','#..##','#...#','#...#'],
+    'S': ['.####','#....','#....','.###.','....#','....#','####.'],
+    'A': ['.###.','#...#','#...#','#####','#...#','#...#','#...#'],
+    'M': ['#...#','##.##','#.#.#','#.#.#','#...#','#...#','#...#'],
+    'U': ['#...#','#...#','#...#','#...#','#...#','#...#','.###.'],
+    'T': ['#####','..#..','..#..','..#..','..#..','..#..','..#..'],
+    ',': ['.....','.....','.....','.....','..##.','..##.','.#...'],
+    ' ': ['.....','.....','.....','.....','.....','.....','.....']
+  };
+
+  var LINES = ['HELLO,', 'BEN SAMMUT'];
+
+  // The fill is a real sentence, spelled out in Wingdings. Hovering decodes it.
+  var MSG = 'WINGDINGSISJUSTTHEALPHABETWEARINGADISGUISEKEEPHOVERINGTOTRANSLATEITHELLOBENSAMMUT';
+  var FALLBACK = '✁✂✈✉☎✎♠♣♥♦✌☞❀✦⚑⌛☀☁';
+
+  function hasWingdings() {
+    var s = document.createElement('span');
+    s.style.cssText = 'position:absolute;visibility:hidden;font-size:96px;white-space:pre';
+    s.textContent = 'WWWWMMMMlliii';
+    document.body.appendChild(s);
+    s.style.fontFamily = 'monospace';
+    var base = s.offsetWidth;
+    s.style.fontFamily = 'Wingdings, monospace';
+    var test = s.offsetWidth;
+    s.remove();
+    return test !== base;
+  }
+
+  var wing = hasWingdings();
+  var host = document.getElementById('lines');
+  var hint = document.getElementById('hint');
+  var grids = [];
+  var msgIndex = 0;
+
+  LINES.forEach(function (text) {
+    var glyphs = text.split('').map(function (ch) { return FONT[ch] || FONT[' ']; });
+    var cols = glyphs.length * 6 - 1;
+    var grid = document.createElement('div');
+    grid.className = 'grid';
+    grid.style.setProperty('--cols', cols);
+
+    var cells = [];
+    for (var r = 0; r < 7; r++) {
+      cells[r] = [];
+      for (var c = 0; c < cols; c++) {
+        var gi = Math.floor(c / 6), gx = c % 6;
+        if (gx > 4 || glyphs[gi][r][gx] !== '#') { cells[r][c] = null; continue; }
+
+        var plain = MSG.charAt(msgIndex % MSG.length);
+        msgIndex++;
+
+        var cell = document.createElement('span');
+        cell.className = 'cell';
+        cell.style.gridArea = (r + 1) + ' / ' + (c + 1);
+
+        var sym = document.createElement('i');
+        sym.className = 'sym';
+        sym.textContent = wing ? plain : FALLBACK.charAt(msgIndex % FALLBACK.length);
+
+        var ltr = document.createElement('i');
+        ltr.className = 'ltr';
+        ltr.textContent = plain;
+
+        cell.appendChild(sym);
+        cell.appendChild(ltr);
+        grid.appendChild(cell);
+        cells[r][c] = cell;
+      }
+    }
+    host.appendChild(grid);
+    grids.push({ el: grid, cells: cells, cols: cols, rect: null, size: 0 });
+  });
+
+  function measure() {
+    grids.forEach(function (g) {
+      g.rect = g.el.getBoundingClientRect();
+      g.size = g.rect.width / g.cols;
+    });
+  }
+  measure();
+  addEventListener('resize', measure);
+  addEventListener('scroll', measure, { passive: true });
+
+  var RADIUS = 4.2; // in cells
+  var active = new Set();
+  var pointer = null;
+  var queued = false;
+  var discovered = false;
+
+  function paint() {
+    queued = false;
+    var next = new Set();
+
+    if (pointer) {
+      grids.forEach(function (g) {
+        if (!g.size) return;
+        var cx = (pointer.x - g.rect.left) / g.size;
+        var cy = (pointer.y - g.rect.top) / g.size;
+        var c0 = Math.floor(cx - RADIUS), c1 = Math.ceil(cx + RADIUS);
+        var r0 = Math.floor(cy - RADIUS), r1 = Math.ceil(cy + RADIUS);
+
+        for (var r = Math.max(0, r0); r <= Math.min(6, r1); r++) {
+          for (var c = Math.max(0, c0); c <= Math.min(g.cols - 1, c1); c++) {
+            var cell = g.cells[r][c];
+            if (!cell) continue;
+            var dx = (c + 0.5) - cx, dy = (r + 0.5) - cy;
+            var t = 1 - Math.sqrt(dx * dx + dy * dy) / RADIUS;
+            if (t <= 0.12) continue;
+            cell.style.setProperty('--t', t.toFixed(3));
+            cell.classList.add('on');
+            next.add(cell);
+            if (!discovered) {
+              discovered = true;
+              hint.classList.add('gone');
+            }
+          }
+        }
+      });
+    }
+
+    active.forEach(function (cell) {
+      if (!next.has(cell)) {
+        cell.classList.remove('on');
+        cell.style.setProperty('--t', 0);
+      }
+    });
+    active = next;
+  }
+
+  function onMove(e) {
+    var p = e.touches ? e.touches[0] : e;
+    pointer = { x: p.clientX, y: p.clientY };
+    if (!queued) { queued = true; requestAnimationFrame(paint); }
+  }
+
+  addEventListener('pointermove', onMove, { passive: true });
+  addEventListener('touchmove', onMove, { passive: true });
+  addEventListener('pointerleave', function () {
+    pointer = null;
+    if (!queued) { queued = true; requestAnimationFrame(paint); }
+  });
+})();
+</script>
 </body>
 </html>

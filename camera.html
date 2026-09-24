@@ -97,8 +97,10 @@ var flashText = '';
 var PALETTE = ['#3fa9f5', '#3ecf8e', '#a259ff', '#ffb648', '#ff5c8a', '#4dd0e1'];
 // Absolute closed-eye score, and how much higher it must be than the other
 // eye's score, to count as a wink rather than a symmetric blink or noise.
-var BLINK_THRESHOLD = 0.42;
-var WINK_MARGIN = 0.2;
+// Kept low and unsmoothed so the colour flips the instant the wink starts,
+// not once it's fully committed.
+var BLINK_THRESHOLD = 0.32;
+var WINK_MARGIN = 0.12;
 // MediaPipe's own left/right eye naming (subject's perspective), matching the
 // blendshape categories below — this is the opposite of what a mirrored viewer sees.
 var EYES = {
@@ -129,8 +131,8 @@ function smooth(prev, next, alpha) {
 }
 
 function applyWinks(categories) {
-  EYES.left.score = smooth(EYES.left.score, categoryScore(categories, 'eyeBlinkLeft'), 0.5);
-  EYES.right.score = smooth(EYES.right.score, categoryScore(categories, 'eyeBlinkRight'), 0.5);
+  EYES.left.score = categoryScore(categories, 'eyeBlinkLeft');
+  EYES.right.score = categoryScore(categories, 'eyeBlinkRight');
 
   ['left', 'right'].forEach(function (key) {
     var eye = EYES[key];
@@ -160,9 +162,9 @@ function drawIris(landmarks, eye, w, h) {
   r = (r / eye.ring.length) * 1.06; // hug the actual iris boundary, not the sclera
 
   // Smooth the geometry across frames so the tint doesn't jitter with landmark noise.
-  eye.gx = smooth(eye.gx, cx, 0.4);
-  eye.gy = smooth(eye.gy, cy, 0.4);
-  eye.gr = smooth(eye.gr, r, 0.4);
+  eye.gx = smooth(eye.gx, cx, 0.6);
+  eye.gy = smooth(eye.gy, cy, 0.6);
+  eye.gr = smooth(eye.gr, r, 0.6);
 
   if (eye.colorIdx < 0) return;
 

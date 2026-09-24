@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Camera</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+  }
+}
+</script>
 <style>
   :root { color-scheme: dark; }
   html, body { height: 100%; }
@@ -25,6 +33,7 @@
     border-radius: 8px;
     background: #111;
     transform: scaleX(-1); /* mirror, like a selfie cam */
+    cursor: pointer;
   }
   #controls {
     display: flex;
@@ -59,6 +68,36 @@
     margin: 0;
     min-height: 1.2em;
   }
+  #modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.88);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    z-index: 10;
+  }
+  #modal.hidden { display: none; }
+  #three-container {
+    width: min(90vw, 560px);
+    height: min(90vw, 560px);
+    max-height: 70vh;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  #three-container canvas { display: block; cursor: grab; }
+  #modalClose {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+  }
+  #modalHint {
+    font-size: 12px;
+    color: #555;
+    margin: 0;
+  }
 </style>
 </head>
 <body>
@@ -70,8 +109,14 @@
     <button id="resetColors">Reset eyes</button>
   </div>
   <p id="status">Requesting camera access…</p>
-  <p id="hint">Wink one eye to change its colour — wink again to cycle.</p>
+  <p id="hint">Wink one eye to change its colour — wink again to cycle. Click the video for a 3D head.</p>
   <p id="debug"></p>
+
+  <div id="modal" class="hidden">
+    <button id="modalClose">Close</button>
+    <div id="three-container"></div>
+    <p id="modalHint">Drag to rotate · scroll to zoom</p>
+  </div>
 
 <script type="module">
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
@@ -84,6 +129,9 @@ var toggle = document.getElementById('toggle');
 var resetColors = document.getElementById('resetColors');
 var status = document.getElementById('status');
 var debug = document.getElementById('debug');
+var modal = document.getElementById('modal');
+var modalClose = document.getElementById('modalClose');
+var threeContainer = document.getElementById('three-container');
 
 var stream = null;
 var rafId = null;
@@ -93,6 +141,20 @@ var modelReady = false;
 var modelError = null;
 var flashUntil = 0;
 var flashText = '';
+var lastLandmarks = null;
+var threeModules = null;
+var three = null;
+
+function updateDebug() {
+  debug.textContent = 'L ' + EYES.left.score.toFixed(2) + '  R ' + EYES.right.score.toFixed(2) +
+    (performance.now() < flashUntil ? '  — ' + flashText : '');
+}
+
+function flash(text, ms) {
+  flashText = text;
+  flashUntil = performance.now() + (ms || 1500);
+  updateDebug();
+}
 
 var PALETTE = ['#3fa9f5', '#3ecf8e', '#a259ff', '#ffb648', '#ff5c8a', '#4dd0e1'];
 // Absolute closed-eye score, and how much higher it must be than the other
@@ -141,14 +203,10 @@ function applyWinks(categories) {
     var wink = closedNow && !eye.closed && (eye.score - other.score) > WINK_MARGIN;
     if (wink) {
       eye.colorIdx = (eye.colorIdx + 1) % PALETTE.length;
-      flashText = (key === 'left' ? 'Left' : 'Right') + ' eye → ' + PALETTE[eye.colorIdx];
-      flashUntil = performance.now() + 1200;
+      flash((key === 'left' ? 'Left' : 'Right') + ' eye → ' + PALETTE[eye.colorIdx], 1200);
     }
     eye.closed = closedNow;
   });
-
-  debug.textContent = 'L ' + EYES.left.score.toFixed(2) + '  R ' + EYES.right.score.toFixed(2) +
-    (performance.now() < flashUntil ? '  — ' + flashText : '');
 }
 
 function drawIris(landmarks, eye, w, h) {
@@ -197,13 +255,164 @@ function renderFrame() {
     var result = faceLandmarker.detectForVideo(video, performance.now());
     var landmarks = result.faceLandmarks && result.faceLandmarks[0];
     var blendshapes = result.faceBlendshapes && result.faceBlendshapes[0];
+    lastLandmarks = landmarks || null;
     if (landmarks && blendshapes) {
       applyWinks(blendshapes.categories);
       drawIris(landmarks, EYES.left, canvas.width, canvas.height);
       drawIris(landmarks, EYES.right, canvas.width, canvas.height);
     }
   }
+
+  updateDebug();
 }
+
+function loadThreeModules() {
+  if (threeModules) return Promise.resolve(threeModules);
+  return Promise.all([
+    import('three'),
+    import('three/addons/controls/OrbitControls.js'),
+    import('https://cdn.jsdelivr.net/npm/d3-delaunay@6.0.4/+esm')
+  ]).then(function (mods) {
+    threeModules = { THREE: mods[0], OrbitControls: mods[1].OrbitControls, Delaunay: mods[2].Delaunay };
+    return threeModules;
+  });
+}
+
+function stopThree() {
+  if (!three) return;
+  cancelAnimationFrame(three.animId);
+  window.removeEventListener('resize', three.resize);
+  three.controls.dispose();
+  three.renderer.dispose();
+  three.mesh.geometry.dispose();
+  three.mesh.material.map.dispose();
+  three.mesh.material.dispose();
+  threeContainer.innerHTML = '';
+  three = null;
+}
+
+function startThree(THREE, OrbitControls, mesh) {
+  stopThree();
+  var width = threeContainer.clientWidth || 480;
+  var height = threeContainer.clientHeight || 480;
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a0a);
+  scene.add(mesh);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  var key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(0.5, 1, 1.5);
+  scene.add(key);
+
+  var camera = new THREE.PerspectiveCamera(35, width / height, 0.01, 10);
+  camera.position.set(0, 0, 1.4);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(width, height);
+  threeContainer.appendChild(renderer.domElement);
+
+  var controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.minDistance = 0.5;
+  controls.maxDistance = 3;
+
+  three = { renderer: renderer, mesh: mesh, controls: controls, animId: 0, resize: null };
+
+  function resize() {
+    var w = threeContainer.clientWidth, h = threeContainer.clientHeight;
+    if (!w || !h) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+  three.resize = resize;
+  window.addEventListener('resize', resize);
+
+  function animate() {
+    three.animId = requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+
+function buildHeadMesh(mods, landmarks) {
+  var THREE = mods.THREE;
+  var snap = document.createElement('canvas');
+  snap.width = canvas.width;
+  snap.height = canvas.height;
+  snap.getContext('2d').drawImage(canvas, 0, 0);
+
+  var w = canvas.width, h = canvas.height, aspect = h / w;
+  var positions = new Float32Array(landmarks.length * 3);
+  var uvs = new Float32Array(landmarks.length * 2);
+  var points2d = [];
+  landmarks.forEach(function (lm, i) {
+    positions[i * 3] = lm.x - 0.5;
+    positions[i * 3 + 1] = -(lm.y - 0.5) * aspect;
+    positions[i * 3 + 2] = -lm.z * 1.8; // exaggerate depth — raw single-frame estimates are subtle
+    uvs[i * 2] = lm.x;
+    uvs[i * 2 + 1] = lm.y;
+    points2d.push([lm.x, lm.y]);
+  });
+
+  // Triangulate the 2D projection rather than embedding MediaPipe's fixed
+  // face-mesh topology — much less code, and the point cloud is dense and
+  // convex enough that a Delaunay mesh looks basically the same.
+  var indices = mods.Delaunay.from(points2d).triangles;
+
+  var geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  geometry.computeVertexNormals();
+
+  var texture = new THREE.CanvasTexture(snap);
+  texture.flipY = false;
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  var material = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide, roughness: 0.9 });
+  return new THREE.Mesh(geometry, material);
+}
+
+var loadingHead = false;
+
+function openHeadModel(landmarks) {
+  cancelAnimationFrame(rafId);
+  loadingHead = true;
+  flash('Building 3D head…', 15000);
+  loadThreeModules().then(function (mods) {
+    var mesh = buildHeadMesh(mods, landmarks);
+    startThree(mods.THREE, mods.OrbitControls, mesh);
+    modal.classList.remove('hidden');
+    loadingHead = false;
+  }).catch(function (err) {
+    flash('3D engine failed to load: ' + (err.message || err), 3000);
+    loadingHead = false;
+    renderFrame();
+  });
+}
+
+function closeModal() {
+  modal.classList.add('hidden');
+  stopThree();
+  renderFrame();
+}
+
+canvas.addEventListener('click', function () {
+  if (loadingHead) return;
+  if (!lastLandmarks) {
+    flash('No face detected — look at the camera and try again');
+    return;
+  }
+  openHeadModel(lastLandmarks);
+});
+
+modalClose.addEventListener('click', closeModal);
+modal.addEventListener('click', function (e) {
+  if (e.target === modal) closeModal();
+});
 
 function loadModel() {
   FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm')

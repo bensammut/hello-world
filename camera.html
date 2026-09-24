@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camera</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: #000;
+    color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+  video {
+    max-width: 92vw;
+    max-height: 78vh;
+    border-radius: 8px;
+    background: #111;
+    transform: scaleX(-1); /* mirror, like a selfie cam */
+  }
+  #controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  select, button {
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  button { cursor: pointer; }
+  button:hover { background: #262626; }
+  #status {
+    font-size: 13px;
+    color: #888;
+    min-height: 1.2em;
+  }
+  #status.error { color: #ff6b6b; }
+</style>
+</head>
+<body>
+  <video id="video" autoplay playsinline muted></video>
+  <div id="controls">
+    <select id="devices"></select>
+    <button id="toggle">Stop</button>
+  </div>
+  <p id="status">Requesting camera access…</p>
+
+<script>
+(function () {
+  var video = document.getElementById('video');
+  var select = document.getElementById('devices');
+  var toggle = document.getElementById('toggle');
+  var status = document.getElementById('status');
+  var stream = null;
+
+  function setStatus(msg, isError) {
+    status.textContent = msg;
+    status.classList.toggle('error', !!isError);
+  }
+
+  function stopStream() {
+    if (!stream) return;
+    stream.getTracks().forEach(function (t) { t.stop(); });
+    stream = null;
+    video.srcObject = null;
+  }
+
+  function start(deviceId) {
+    stopStream();
+    var constraints = {
+      video: deviceId ? { deviceId: { exact: deviceId } } : true,
+      audio: false
+    };
+    navigator.mediaDevices.getUserMedia(constraints).then(function (s) {
+      stream = s;
+      video.srcObject = s;
+      setStatus('Live');
+      toggle.textContent = 'Stop';
+      return navigator.mediaDevices.enumerateDevices();
+    }).then(function (devices) {
+      if (!devices) return;
+      var cams = devices.filter(function (d) { return d.kind === 'videoinput'; });
+      select.innerHTML = '';
+      cams.forEach(function (d, i) {
+        var opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || ('Camera ' + (i + 1));
+        select.appendChild(opt);
+      });
+      if (deviceId) select.value = deviceId;
+    }).catch(function (err) {
+      setStatus(err.name + ': ' + err.message, true);
+    });
+  }
+
+  select.addEventListener('change', function () {
+    start(select.value);
+  });
+
+  toggle.addEventListener('click', function () {
+    if (stream) {
+      stopStream();
+      toggle.textContent = 'Start';
+      setStatus('Stopped');
+    } else {
+      start(select.value);
+    }
+  });
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus('This browser does not support camera access.', true);
+  } else {
+    start();
+  }
+})();
+</script>
+</body>
+</html>

@@ -109,7 +109,7 @@
     <button id="resetColors">Reset eyes</button>
   </div>
   <p id="status">Requesting camera access…</p>
-  <p id="hint">Wink one eye to change its colour — wink again to cycle. Click the video for a 3D head.</p>
+  <p id="hint">Wink one eye to change its colour — wink again to cycle. Click the video for a live 3D head.</p>
   <p id="debug"></p>
 
   <div id="modal" class="hidden">
@@ -261,6 +261,7 @@ function renderFrame() {
       drawIris(landmarks, EYES.left, canvas.width, canvas.height);
       drawIris(landmarks, EYES.right, canvas.width, canvas.height);
     }
+    if (three && landmarks) updateHeadMesh(landmarks);
   }
 
   updateDebug();
@@ -337,21 +338,21 @@ function startThree(THREE, OrbitControls, mesh) {
   animate();
 }
 
+function landmarkXYZ(lm, w, h, aspect) {
+  return [lm.x - 0.5, -(lm.y - 0.5) * aspect, -lm.z * 1.8]; // z exaggerated — raw single-frame depth is subtle
+}
+
 function buildHeadMesh(mods, landmarks) {
   var THREE = mods.THREE;
-  var snap = document.createElement('canvas');
-  snap.width = canvas.width;
-  snap.height = canvas.height;
-  snap.getContext('2d').drawImage(canvas, 0, 0);
-
   var w = canvas.width, h = canvas.height, aspect = h / w;
   var positions = new Float32Array(landmarks.length * 3);
   var uvs = new Float32Array(landmarks.length * 2);
   var points2d = [];
   landmarks.forEach(function (lm, i) {
-    positions[i * 3] = lm.x - 0.5;
-    positions[i * 3 + 1] = -(lm.y - 0.5) * aspect;
-    positions[i * 3 + 2] = -lm.z * 1.8; // exaggerate depth — raw single-frame estimates are subtle
+    var p = landmarkXYZ(lm, w, h, aspect);
+    positions[i * 3] = p[0];
+    positions[i * 3 + 1] = p[1];
+    positions[i * 3 + 2] = p[2];
     uvs[i * 2] = lm.x;
     uvs[i * 2 + 1] = lm.y;
     points2d.push([lm.x, lm.y]);
@@ -359,27 +360,49 @@ function buildHeadMesh(mods, landmarks) {
 
   // Triangulate the 2D projection rather than embedding MediaPipe's fixed
   // face-mesh topology — much less code, and the point cloud is dense and
-  // convex enough that a Delaunay mesh looks basically the same.
+  // convex enough that a Delaunay mesh looks basically the same. Computed
+  // once from the opening pose; positions/uvs update live every frame
+  // after that, but re-triangulating too would make the mesh flicker.
   var indices = mods.Delaunay.from(points2d).triangles;
 
   var geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2).setUsage(THREE.DynamicDrawUsage));
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
   geometry.computeVertexNormals();
 
-  var texture = new THREE.CanvasTexture(snap);
+  // The texture reads straight off the live canvas (video frame + any eye
+  // tint) — texture.needsUpdate is set every frame, so the skin is live too.
+  var texture = new THREE.CanvasTexture(canvas);
   texture.flipY = false;
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
 
   var material = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide, roughness: 0.9 });
   return new THREE.Mesh(geometry, material);
 }
 
+function updateHeadMesh(landmarks) {
+  var mesh = three.mesh;
+  var pos = mesh.geometry.attributes.position;
+  var uv = mesh.geometry.attributes.uv;
+  if (landmarks.length !== pos.count) return; // defensive: model swap mid-frame
+  var w = canvas.width, h = canvas.height, aspect = h / w;
+  for (var i = 0; i < landmarks.length; i++) {
+    var p = landmarkXYZ(landmarks[i], w, h, aspect);
+    pos.setXYZ(i, p[0], p[1], p[2]);
+    uv.setXY(i, landmarks[i].x, landmarks[i].y);
+  }
+  pos.needsUpdate = true;
+  uv.needsUpdate = true;
+  mesh.geometry.computeVertexNormals();
+  mesh.material.map.needsUpdate = true;
+}
+
 var loadingHead = false;
 
 function openHeadModel(landmarks) {
-  cancelAnimationFrame(rafId);
   loadingHead = true;
   flash('Building 3D head…', 15000);
   loadThreeModules().then(function (mods) {
@@ -390,14 +413,12 @@ function openHeadModel(landmarks) {
   }).catch(function (err) {
     flash('3D engine failed to load: ' + (err.message || err), 3000);
     loadingHead = false;
-    renderFrame();
   });
 }
 
 function closeModal() {
   modal.classList.add('hidden');
   stopThree();
-  renderFrame();
 }
 
 canvas.addEventListener('click', function () {

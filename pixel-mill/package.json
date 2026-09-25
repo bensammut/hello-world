@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:pages": "tsc && vite build --outDir play --emptyOutDir"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",

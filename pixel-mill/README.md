@@ -12,6 +12,12 @@ npm run build    # type-check + production bundle in dist/
 
 Everything runs client-side (Vite + TypeScript + Three.js, no UI framework).
 
+**Live:** https://bensammut.github.io/hello-world/pixel-mill/play/
+
+GitHub Pages serves this repo's `main` branch as-is, so the deployed build is
+committed in `play/`. To update it, run `npm run build:pages`, then commit and
+push `play/`.
+
 ## Controls
 
 | Input | Action |

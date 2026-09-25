@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import {
-  COLORS, DEFAULT_GRID, LIMITS, MAX_GRID, MESH_BUDGET_MS, MIN_GRID, TOOLS, TOOL_BY_ID, VOXEL_MM,
+  CAMERA_PRESETS, COLORS, DEFAULT_GRID, MACHINE, LIMITS, MAX_GRID, MESH_BUDGET_MS, MIN_GRID, TOOLS, TOOL_BY_ID, VOXEL_MM,
   type CameraPresetName, type ToolId,
 } from "./config";
 import { SoundEngine } from "./audio/SoundEngine";
 import { Particles } from "./effects/Particles";
+import { HardwareController } from "./input/HardwareController";
 import { InputController } from "./input/InputController";
 import { downloadBlob, loadProject, saveProject } from "./io/projectFile";
 import { exportStl } from "./io/stlExport";
@@ -41,6 +42,9 @@ export class App {
   private ui: UI;
   private input: InputController;
   private jogging = false;
+  private hw: HardwareController;
+  private hwDown = false;
+  private hwZ = 0;
   private canvas: HTMLCanvasElement;
 
   private assemblies = {} as Record<ToolId, THREE.Group>;
@@ -81,6 +85,17 @@ export class App {
 
     this.ui = new UI(root.querySelector("#ui") as HTMLElement, this.store, this.uiActions());
     this.input = new InputController(this.canvas, this.inputActions());
+    this.hw = new HardwareController(root.querySelector("#ui") as HTMLElement);
+    this.hw.onButton = (bit) => {
+      if (this.store.state.helpOpen || this.ui.dialogOpen) return;
+      if (bit === 2) return this.exportStl();
+      if (bit === 3 || bit === 4) return this.stepCamera(bit === 4 ? 1 : -1);
+      if (bit === 5) return this.blowChips();
+      if (bit > 1) return;
+      const i = TOOLS.findIndex((t) => t.id === this.store.state.toolId);
+      const next = (i + (bit === 1 ? 1 : -1) + TOOLS.length) % TOOLS.length;
+      this.selectTool(TOOLS[next].id);
+    };
 
     const resize = () => {
       // DPR can change without a size change (browser zoom, moving screens).
@@ -343,6 +358,14 @@ export class App {
     this.store.set({ camera: name });
   }
 
+  /** Cycle TOP -> FRONT -> SIDE -> ISO; from a free orbit, forward starts at TOP and back at ISO. */
+  private stepCamera(dir: 1 | -1) {
+    const names = Object.keys(CAMERA_PRESETS) as CameraPresetName[];
+    const cur = this.store.state.camera ? names.indexOf(this.store.state.camera) : -1;
+    const i = cur < 0 ? (dir > 0 ? 0 : names.length - 1) : (cur + dir + names.length) % names.length;
+    this.setCamera(names[i]);
+  }
+
   private freeCamera() {
     if (this.store.state.camera !== null) this.store.set({ camera: null });
   }
@@ -481,6 +504,7 @@ export class App {
     let moving = false;
 
     this.updateJog();
+    this.updateHardware(dt);
     if (this.changer.active) this.changer.update(dt);
     if (this.changer.active) {
       head.copy(this.changer.head);
@@ -607,6 +631,39 @@ export class App {
     const inMaterial = this.motion.tip.y < this.layout.top;
     const speed = (inMaterial ? this.store.state.feed / 60 : 60) * (j.fine ? 0.2 : 1);
     this.motion.jog(dx, dz, speed);
+  }
+
+  /** Encoders = absolute X/Y over the stock; slider = depth. Slider at top = tool up and following in the air. */
+  private updateHardware(dt: number) {
+    if (!this.hw.connected) { this.hwDown = false; return; }
+    const L = this.layout;
+    const p = this.hw.state;
+    // Low-pass the slider (~0.1 s) so ADC noise doesn't make the depth jitter.
+    this.hwZ += (p.z - this.hwZ) * Math.min(1, dt / 0.1);
+    const margin = 4;
+    const x = L.min.x - margin + p.x * (L.size.x + 2 * margin);
+    const z = L.min.z + L.size.z + margin - p.y * (L.size.z + 2 * margin); // machine Y grows toward world -Z
+    this.hover.x = x; this.hover.z = z; this.hover.on = true;
+    if (this.changer.active || this.store.state.helpOpen || this.ui.dialogOpen) return;
+
+    const UP_ZONE = 0.04;
+    const down = this.hwZ > UP_ZONE;
+    if (down) {
+      // Hysteresis: slider noise must not flip the depth between neighbouring 0.5 mm steps.
+      const want = ((this.hwZ - UP_ZONE) / (1 - UP_ZONE)) * this.maxDepth();
+      if (Math.abs(want - this.store.state.depth) > LIMITS.depthStep * 0.75) this.setDepth(want);
+      if (!this.motion.pressed) this.motion.press(x, z, this.diameter / 2);
+      else this.motion.steer(x, z, this.spec);
+    } else {
+      if (this.hwDown) this.motion.retract();
+      const dx = x - this.motion.tip.x;
+      const dz = z - this.motion.tip.z;
+      const dist = Math.hypot(dx, dz);
+      // Only follow once clear of the material, so lifting never drags a groove.
+      if (dist > 0.3 && this.motion.tip.y > L.top + 1)
+        this.motion.jog(dx / dist, dz / dist, Math.min(MACHINE.rapidSpeed, dist / 0.08));
+    }
+    this.hwDown = down;
   }
 
   private updateGhost(depth: number) {

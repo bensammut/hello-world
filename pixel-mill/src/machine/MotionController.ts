@@ -129,6 +129,14 @@ export class MotionController {
     this.pressed = false;
   }
 
+  /** Absolute-position input (pendant): chase only the latest target, never replay a backlog of moves. */
+  steer(x: number, z: number, tool: ToolSpec) {
+    if (!this.pressed || tool.plungeOnly) return;
+    const [cx, cz] = this.clampTarget(x, z);
+    this.clearQueue();
+    this.enqueue(cx, cz);
+  }
+
   /** Keyboard jog: keep a single waypoint a short lead ahead of the tool so it stops promptly on release. */
   jog(dirX: number, dirZ: number, speed: number) {
     this.jogSpeed = speed;

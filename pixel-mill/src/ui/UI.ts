@@ -40,6 +40,10 @@ export interface LiveReadout {
 
 const $ = <T extends HTMLElement>(root: ParentNode, sel: string) => root.querySelector(sel) as T;
 const fmt = (n: number, d = 1) => n.toFixed(d);
+/** Only touch the DOM when the text actually changes (renders run many times a second). */
+const txt = (el: HTMLElement, text: string) => {
+  if (el.textContent !== text) el.textContent = text;
+};
 const pad = (n: number, w: number) => String(Math.round(n)).padStart(w, " ");
 
 function mmss(t: number) {
@@ -306,29 +310,33 @@ export class UI {
     for (const b of this.root.querySelectorAll<HTMLElement>(".slot")) b.classList.toggle("active", b.dataset.tool === s.toolId);
     for (const t of TOOLS) {
       const el = this.root.querySelector<HTMLElement>(`[data-dia="${t.id}"]`);
-      if (el) el.textContent = `Ø${fmt(t.diameters[s.diameterIndex[t.id]])}`;
+      if (el) txt(el, `Ø${fmt(t.diameters[s.diameterIndex[t.id]])}`);
     }
     const L = this.live;
-    L.dia.textContent = `Ø ${fmt(dia)} MM`;
-    L.blurb.textContent = `${tool.name}: ${tool.blurb}. Max depth ${tool.maxDepth} mm.${tool.coneDeg ? ` ${tool.coneDeg}° tip.` : ""}`;
-    L.tool.textContent = `T${tool.slot} ${tool.name}`;
-    L.toolDia.textContent = `${fmt(dia)} MM  ${tool.flutes}FL`;
-    L.depth.textContent = fmt(s.depth);
-    L.feedSet.textContent = String(s.feed);
-    L.rpmSet.textContent = String(s.rpm);
-    L.mode.textContent = tool.plungeOnly ? "DRILL CYCLE" : s.plungeMode ? "PLUNGE" : "CONTOUR";
-    L.plunge.textContent = s.plungeMode ? "PLUNGE ON [SPC]" : "PLUNGE OFF [SPC]";
+    txt(L.dia, `Ø ${fmt(dia)} MM`);
+    txt(L.blurb, `${tool.name}: ${tool.blurb}. Max depth ${tool.maxDepth} mm.${tool.coneDeg ? ` ${tool.coneDeg}° tip.` : ""}`);
+    txt(L.tool, `T${tool.slot} ${tool.name}`);
+    txt(L.toolDia, `${fmt(dia)} MM  ${tool.flutes}FL`);
+    txt(L.depth, fmt(s.depth));
+    txt(L.feedSet, String(s.feed));
+    txt(L.rpmSet, String(s.rpm));
+    txt(L.mode, tool.plungeOnly ? "DRILL CYCLE" : s.plungeMode ? "PLUNGE" : "CONTOUR");
+    txt(L.plunge, s.plungeMode ? "PLUNGE ON [SPC]" : "PLUNGE OFF [SPC]");
     L.plunge.classList.toggle("on", s.plungeMode);
-    L.soundLabel.textContent = s.soundOn ? "SOUND ON" : "SOUND OFF";
-    L.soundIcon.innerHTML = spriteSvg(s.soundOn ? ICONS.speakerOn : ICONS.speakerOff, 2);
-    L.undo.textContent = String(s.undoDepth);
-    L.redo.textContent = String(s.redoDepth);
-    L.removed.textContent = fmt(s.stats.removedMm3 / 1000, 2);
-    L.cutTime.textContent = mmss(s.stats.cutTime);
-    L.toolChanges.textContent = String(s.stats.toolChanges);
-    L.strokes.textContent = String(s.stats.strokes);
+    txt(L.soundLabel, s.soundOn ? "SOUND ON" : "SOUND OFF");
+    const icon = s.soundOn ? "on" : "off";
+    if (L.soundIcon.dataset.icon !== icon) {
+      L.soundIcon.dataset.icon = icon;
+      L.soundIcon.innerHTML = spriteSvg(s.soundOn ? ICONS.speakerOn : ICONS.speakerOff, 2);
+    }
+    txt(L.undo, String(s.undoDepth));
+    txt(L.redo, String(s.redoDepth));
+    txt(L.removed, fmt(s.stats.removedMm3 / 1000, 2));
+    txt(L.cutTime, mmss(s.stats.cutTime));
+    txt(L.toolChanges, String(s.stats.toolChanges));
+    txt(L.strokes, String(s.stats.strokes));
     const [sx, sy, sz] = this.act.currentStockMm();
-    L.stock.textContent = `${sx}×${sz}×${sy}`;
+    txt(L.stock, `${sx}×${sz}×${sy}`);
 
     const depthInput = $<HTMLInputElement>(this.root, '[data-input="depth"]');
     depthInput.max = String(this.act.maxDepth());
@@ -343,24 +351,26 @@ export class UI {
   updateLive(s: AppState, r: LiveReadout) {
     const L = this.live;
     const status = s.status === "TOOL CHANGE" ? `TOOL CHG ${Math.round(r.changeProgress * 100)}%` : s.status;
-    L.status.textContent = status;
+    txt(L.status, status);
     L.status.dataset.state = s.status;
-    L.rpm.textContent = `${pad(r.rpm, 5)} RPM`;
-    L.rpmBar.style.width = `${Math.min(100, (r.rpm / LIMITS.rpm.max) * 100)}%`;
-    L.feed.textContent = `${pad(r.feed, 4)} MM/MIN`;
-    L.x.textContent = `${r.x >= 0 ? "+" : ""}${fmt(r.x, 2)}`;
-    L.y.textContent = `${r.y >= 0 ? "+" : ""}${fmt(r.y, 2)}`;
-    L.z.textContent = `${r.z >= 0 ? "+" : ""}${fmt(r.z, 2)}`;
-    L.width.textContent = `${fmt(r.cutWidth, 2)} MM CUT`;
-    L.chips.textContent = String(r.chips);
-    L.fps.textContent = `${Math.round(r.fps)} FPS`;
+    txt(L.rpm, `${pad(r.rpm, 5)} RPM`);
+    const bar = `${Math.min(100, (r.rpm / LIMITS.rpm.max) * 100).toFixed(1)}%`;
+    if (L.rpmBar.style.width !== bar) L.rpmBar.style.width = bar;
+    txt(L.feed, `${pad(r.feed, 4)} MM/MIN`);
+    txt(L.x, `${r.x >= 0 ? "+" : ""}${fmt(r.x, 2)}`);
+    txt(L.y, `${r.y >= 0 ? "+" : ""}${fmt(r.y, 2)}`);
+    txt(L.z, `${r.z >= 0 ? "+" : ""}${fmt(r.z, 2)}`);
+    txt(L.width, `${fmt(r.cutWidth, 2)} MM CUT`);
+    txt(L.chips, String(r.chips));
+    txt(L.fps, `${Math.round(r.fps)} FPS`);
   }
 
   showDepthTag(x: number, y: number, text: string, visible: boolean) {
     this.depthTag.hidden = !visible;
     if (!visible) return;
-    this.depthTag.style.transform = `translate(${Math.round(x) + 14}px, ${Math.round(y) - 22}px)`;
-    this.depthTag.textContent = text;
+    const t = `translate(${Math.round(x) + 14}px, ${Math.round(y) - 22}px)`;
+    if (this.depthTag.style.transform !== t) this.depthTag.style.transform = t;
+    txt(this.depthTag, text);
   }
 
   flashWarning(text: string) {

@@ -1,0 +1,667 @@
+/* =============================================================================
+   PIXEL MILL · Android control surface (loaded only by android.html)
+   K.O. II-style: light chassis rails, dark keys, one black segment display.
+   Colour roles:
+     paper / chassis / chassis-hi / chassis-lo  device body, sheets, grooves
+     ink / ink-dim                              printed labels on the body
+     key / key-hi / key-lo / key-label          dark keys and their bevel
+     lcd / seg-ghost / seg-on                   display glass, unlit and lit segments
+     orange (+hi/lo)                            selected tool, active mode (the only UI accent)
+     vermilion                                  cutting dot, collision, errors
+     blue                                       tool change in progress
+   ========================================================================== */
+:root.pm-android {
+  --paper: #eeefec;
+  --chassis: #d9d9d4;
+  --chassis-hi: #f1f1ee;
+  --chassis-lo: #bdbdb7;
+  --ink: #1d1d1b;
+  --ink-dim: #74746e;
+  --key: #2b2b2a;
+  --key-hi: #3f3f3d;
+  --key-lo: #121211;
+  --key-label: #f2f2ee;
+  --lcd: #0b0b0b;
+  --seg-ghost: #262626;
+  --seg-on: #f4f4f0;
+  --orange: #e8643a;
+  --orange-hi: #f28a64;
+  --orange-lo: #b1431f;
+  --vermilion: #e03c2c;
+  --blue: #5b93bd;
+
+  --sans: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  /* Type scale: micro labels, body, title (numbers go on the segment display). */
+  --fs-micro: 10px;
+  --fs-body: 13px;
+  --fs-title: 20px;
+  /* The shared UI refers to these; point them at the new face. */
+  --pixel: var(--sans);
+  --term: var(--sans);
+
+  --gap: 6px;
+  --edge: 8px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+}
+
+/* ---------- Base: no scrolling, pull-to-refresh, selection or tap flashes ---------- */
+.pm-android,
+.pm-android body {
+  background: var(--paper);
+  overscroll-behavior: none;
+}
+.pm-android body {
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+  letter-spacing: 0.04em;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+.pm-android #ui {
+  text-transform: uppercase;
+}
+.pm-android #view {
+  touch-action: none;
+}
+
+/* Desktop panels are replaced by the rails; their controls were moved out by AndroidLayer. */
+.pm-android .topbar,
+.pm-android .magazine,
+.pm-android .hud,
+.pm-android .stats,
+.pm-android .cams,
+.pm-android .hint {
+  display: none !important;
+}
+
+/* ---------- Keys (one style for every control) ---------- */
+.pm-android .ko-key,
+.pm-android .dialog button {
+  font: 500 var(--fs-micro) / 1 var(--sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--key-label);
+  background: var(--key);
+  border: 0;
+  border-radius: 5px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 8px;
+  box-shadow: inset 0 2px 0 var(--key-hi), inset 0 -3px 0 var(--key-lo);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transform: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pm-android .ko-key:active,
+.pm-android .dialog button:active {
+  box-shadow: inset 0 3px 0 var(--key-lo);
+  padding-top: 8px;
+}
+.pm-android .ko-key.on,
+.pm-android .ko-key.active {
+  background: var(--orange);
+  color: var(--ink);
+  box-shadow: inset 0 2px 0 var(--orange-hi), inset 0 -3px 0 var(--orange-lo);
+}
+.pm-android .ko-count {
+  color: var(--orange-hi);
+  font-weight: 700;
+}
+.pm-android .ko-key.on .ko-count {
+  color: var(--ink);
+}
+.pm-android #pendant-btn {
+  color: var(--key-label) !important;
+}
+.pm-android #pendant-btn.on {
+  color: var(--ink) !important;
+}
+.pm-android .ko-right .ko-pendant {
+  grid-column: 1 / -1;
+}
+
+/* Tool keys: pictogram, slot number, short name. */
+.pm-android .ko-tool {
+  position: relative;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 4px 5px;
+  --ti-cut: var(--key);
+}
+.pm-android .ko-tool .ti {
+  width: 21px;
+  height: 28px;
+  display: block;
+}
+.pm-android .ti .fg {
+  fill: currentColor;
+}
+.pm-android .ti .cut {
+  fill: var(--ti-cut);
+}
+.pm-android .ko-tool .n {
+  position: absolute;
+  left: 6px;
+  top: 5px;
+  font-size: 9px;
+  color: #8d8d88;
+}
+.pm-android .ko-tool .nm {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+.pm-android .ko-tool.active {
+  --ti-cut: var(--orange);
+}
+.pm-android .ko-tool.active .n {
+  color: var(--ink);
+}
+
+/* ---------- Chassis rails ---------- */
+.pm-android .ko-rail {
+  position: fixed;
+  background: var(--chassis);
+  box-shadow: inset 0 2px 0 var(--chassis-hi), inset 0 -3px 0 var(--chassis-lo);
+  pointer-events: auto;
+  color: var(--ink);
+}
+.pm-android .ko-brand {
+  font: 700 11px / 1 var(--sans);
+  letter-spacing: 0.12em;
+  text-align: center;
+  padding: 4px 0 2px;
+}
+.pm-android .ko-silk {
+  font: 500 9px / 1 var(--sans);
+  letter-spacing: 0.16em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+}
+.pm-android .ko-silk::before,
+.pm-android .ko-silk::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ink);
+  opacity: 0.35;
+}
+
+/* ---------- Display ---------- */
+.pm-android .ko-lcd {
+  background: var(--lcd);
+  color: var(--seg-on);
+  border-radius: 6px;
+  padding: 7px 9px;
+  box-shadow: inset 0 0 0 2px #000, 0 0 0 3px var(--chassis-lo);
+}
+.pm-android .ko-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 9px / 1 var(--sans);
+  letter-spacing: 0.12em;
+  min-height: 16px;
+}
+.pm-android .ko-grow {
+  flex: 1;
+}
+.pm-android .ko-big {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 5px 0;
+}
+.pm-android .ko-unit {
+  font: 700 9px / 1 var(--sans);
+  letter-spacing: 0.12em;
+  margin-bottom: 3px;
+}
+.pm-android .seg {
+  display: block;
+  width: auto;
+}
+.pm-android .seg line {
+  stroke: var(--seg-ghost);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+.pm-android .seg line.on {
+  stroke: var(--seg-on);
+}
+.pm-android .seg circle {
+  fill: var(--seg-ghost);
+}
+.pm-android .seg circle.on {
+  fill: var(--seg-on);
+}
+.pm-android .ko-blk {
+  padding: 2px 5px;
+  font: 700 9px / 1.2 var(--sans);
+  letter-spacing: 0.1em;
+  color: var(--lcd);
+  white-space: nowrap;
+}
+.pm-android .ko-blk.white {
+  background: var(--seg-on);
+}
+.pm-android .ko-blk.orange {
+  background: var(--orange);
+}
+.pm-android .ko-blk.blue {
+  background: var(--blue);
+}
+.pm-android .ko-blk.out {
+  outline: 1.5px solid var(--vermilion);
+  color: var(--vermilion);
+}
+.pm-android .ko-blk.ghost {
+  outline: 1.5px solid var(--seg-ghost);
+  color: var(--seg-ghost);
+}
+.pm-android .ko-red {
+  color: var(--vermilion);
+}
+.pm-android .ko-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--vermilion);
+  flex: none;
+}
+.pm-android .ko-dot.off {
+  background: var(--seg-ghost);
+}
+.pm-android .ko-blink {
+  animation: ko-blink 0.9s steps(2) infinite;
+}
+@keyframes ko-blink {
+  50% {
+    opacity: 0.15;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-android .ko-blink {
+    animation: none;
+  }
+}
+.pm-android .ko-dro {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+}
+.pm-android .ko-dro .k {
+  font: 700 9px / 1 var(--sans);
+  letter-spacing: 0.1em;
+}
+
+/* ---------- Sheet (MORE) ---------- */
+.pm-android .ko-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.35);
+  pointer-events: auto;
+  z-index: 30;
+}
+.pm-android .ko-sheet {
+  z-index: 31;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  transition: transform 0.22s ease-out;
+  visibility: hidden;
+}
+.pm-android .ko-sheet.open {
+  visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-android .ko-sheet {
+    transition: none;
+  }
+}
+.pm-android .ko-grab {
+  width: 44px;
+  height: 20px;
+  justify-self: center;
+  position: relative;
+  cursor: pointer;
+}
+.pm-android .ko-grab::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chassis-lo);
+}
+.pm-android .ko-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+}
+.pm-android .ko-misc {
+  grid-template-columns: repeat(2, 1fr);
+}
+.pm-android .ko-wide {
+  grid-column: 1 / -1;
+}
+
+/* Faders (the shared feed / spindle sliders, restyled). */
+.pm-android .ko-faders {
+  display: grid;
+  gap: 4px;
+}
+.pm-android .ko-faders .slider {
+  margin: 0;
+}
+.pm-android .ko-faders .slider span {
+  font: 500 9px / 1 var(--sans);
+  letter-spacing: 0.14em;
+  color: var(--ink);
+  margin: 0;
+}
+.pm-android .ko-faders .slider b {
+  font: 700 12px / 1 var(--sans);
+  color: var(--ink);
+}
+.pm-android input[type="range"] {
+  height: 44px;
+}
+.pm-android input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--chassis-lo);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+.pm-android input[type="range"]::-webkit-slider-thumb {
+  width: 16px;
+  height: 28px;
+  margin-top: -11px;
+  border: 0;
+  border-top: 3px solid var(--orange);
+  border-radius: 3px;
+  background: var(--key);
+  box-shadow: inset 0 -2px 0 var(--key-lo);
+}
+
+/* Job stats. */
+.pm-android .ko-stats table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pm-android .ko-stats th {
+  text-align: left;
+  font: 500 9px / 1 var(--sans);
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+  padding: 5px 0;
+}
+.pm-android .ko-stats td {
+  text-align: right;
+  font: 500 var(--fs-body) / 1 var(--sans);
+  color: var(--ink);
+}
+
+/* ---------- Landscape (primary): tools left, display + keys right, centre clear ---------- */
+.pm-android .ko-top {
+  display: none;
+}
+.pm-android .ko-left {
+  left: calc(var(--edge) + var(--safe-l));
+  top: calc(var(--edge) + var(--safe-t));
+  bottom: calc(var(--edge) + var(--safe-b));
+  width: 84px;
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.pm-android .ko-tools {
+  flex: 1;
+  display: grid;
+  grid-auto-rows: 1fr;
+  gap: var(--gap);
+}
+.pm-android .ko-right {
+  right: calc(var(--edge) + var(--safe-r));
+  top: calc(var(--edge) + var(--safe-t));
+  bottom: calc(var(--edge) + var(--safe-b));
+  width: 184px;
+  border-radius: 12px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+  align-content: start;
+  overflow-y: auto;
+}
+.pm-android .ko-right .ko-depth,
+.pm-android .ko-right .ko-silk {
+  grid-column: 1 / -1;
+}
+.pm-android .ko-sheet {
+  top: calc(var(--edge) + var(--safe-t));
+  bottom: calc(var(--edge) + var(--safe-b));
+  right: calc(var(--edge) + var(--safe-r));
+  width: min(360px, 48vw);
+  border-radius: 12px;
+  transform: translateX(calc(100% + 24px));
+}
+.pm-android .ko-sheet.open {
+  transform: none;
+}
+
+/* ---------- Portrait (permitted): status strip on top, two-row dock at the bottom ---------- */
+@media (orientation: portrait) {
+  .pm-android .ko-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: fixed;
+    left: calc(var(--edge) + var(--safe-l));
+    right: calc(var(--edge) + var(--safe-r));
+    top: calc(var(--edge) + var(--safe-t));
+    padding: 5px 5px 5px 9px;
+    pointer-events: auto;
+  }
+  .pm-android .ko-top > [data-ko="status-top"] {
+    flex: 1;
+    min-width: 0;
+  }
+  .pm-android .ko-top .ko-pendant {
+    flex: none;
+    min-height: 44px;
+    padding: 0 12px;
+  }
+  .pm-android .ko-left {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: calc(var(--safe-b) + 112px);
+    width: auto;
+    border-radius: 14px 14px 0 0;
+    padding: 10px 10px 0;
+    box-shadow: inset 0 2px 0 var(--chassis-hi);
+  }
+  .pm-android .ko-brand {
+    display: none;
+  }
+  .pm-android .ko-tools {
+    grid-template-columns: repeat(6, 1fr);
+    grid-auto-rows: auto;
+  }
+  .pm-android .ko-tool {
+    min-height: 56px;
+  }
+  .pm-android .ko-right {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    border-radius: 0;
+    padding: 6px 10px calc(10px + var(--safe-b));
+    box-shadow: none;
+    overflow: visible;
+    grid-template-columns: repeat(6, 1fr);
+    grid-template-areas:
+      "lcd lcd up down dm dp"
+      "ret ret plg plg und mor";
+  }
+  .pm-android .ko-right .ko-silk,
+  .pm-android .ko-depth .ko-row {
+    display: none;
+  }
+  .pm-android .ko-depth {
+    grid-area: lcd;
+    grid-column: auto;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+  }
+  .pm-android .ko-depth .ko-big {
+    margin: 0;
+  }
+  .pm-android .ko-depth .ko-big .seg {
+    height: 24px;
+  }
+  .pm-android [data-ko="k-up"] { grid-area: up; }
+  .pm-android [data-ko="k-down"] { grid-area: down; }
+  .pm-android [data-ko="k-dia-"] { grid-area: dm; }
+  .pm-android [data-ko="k-dia+"] { grid-area: dp; }
+  .pm-android [data-ko="k-retract"] { grid-area: ret; }
+  .pm-android [data-ko="k-plunge"] { grid-area: plg; }
+  .pm-android [data-ko="k-undo"] { grid-area: und; }
+  .pm-android [data-ko="k-more"] { grid-area: mor; }
+  .pm-android .ko-sheet {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 50dvh;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: calc(16px + var(--safe-b));
+    transform: translateY(100%);
+  }
+  .pm-android .toast {
+    top: calc(64px + var(--safe-t));
+  }
+}
+
+/* ---------- Shared overlays, restyled ---------- */
+.pm-android .toast {
+  top: calc(14px + var(--safe-t));
+  bottom: auto;
+  background: var(--lcd);
+  color: var(--seg-on);
+  border: 0;
+  border-radius: 6px;
+  font: 500 var(--fs-micro) / 1 var(--sans);
+  letter-spacing: 0.12em;
+  z-index: 40;
+}
+.pm-android .toast[data-kind="err"] {
+  color: var(--vermilion);
+}
+.pm-android .warn {
+  border: 6px solid var(--vermilion);
+  z-index: 40;
+}
+.pm-android .warn div {
+  background: var(--lcd);
+  color: var(--vermilion);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--vermilion);
+  font: 700 14px / 1 var(--sans);
+  letter-spacing: 0.16em;
+  text-shadow: none;
+}
+.pm-android .depth-tag {
+  font: 700 var(--fs-micro) / 1 var(--sans);
+  letter-spacing: 0.1em;
+  background: var(--lcd);
+  color: var(--seg-on);
+  border: 0;
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+.pm-android .overlay {
+  background: rgba(10, 10, 10, 0.45);
+  z-index: 50;
+}
+.pm-android .dialog {
+  background: var(--paper);
+  color: var(--ink);
+  border: 0;
+  border-radius: 14px;
+  clip-path: none;
+  box-shadow: none;
+  max-height: calc(100dvh - 32px);
+  width: min(560px, calc(100vw - 32px));
+}
+.pm-android .dialog h2 {
+  font: 300 var(--fs-title) / 1 var(--sans);
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  margin-bottom: 14px;
+}
+.pm-android .dialog h2::before {
+  content: none;
+}
+.pm-android .keys th {
+  font: 700 var(--fs-micro) / 1.2 var(--sans);
+  color: var(--ink);
+}
+.pm-android .keys td,
+.pm-android .note {
+  font: 400 var(--fs-body) / 1.35 var(--sans);
+  color: var(--ink);
+}
+.pm-android .keys tr:nth-child(odd) {
+  background: var(--chassis);
+}
+.pm-android .note {
+  color: var(--ink-dim);
+}
+.pm-android .presets button small {
+  font: 400 var(--fs-micro) / 1 var(--sans);
+  color: inherit;
+  opacity: 0.7;
+}
+.pm-android .presets button {
+  flex-direction: column;
+}
+.pm-android .dims input {
+  font: 500 16px / 1 var(--sans);
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--chassis-lo);
+  border-radius: 4px;
+  min-height: 44px;
+}
+
+/* Short landscape screens: drop the rail's divider labels so the pendant key fits without scrolling. */
+@media (orientation: landscape) and (max-height: 440px) {
+  .pm-android .ko-right .ko-silk {
+    display: none;
+  }
+}

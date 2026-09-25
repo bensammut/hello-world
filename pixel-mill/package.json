@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "build:pages": "tsc && vite build --outDir play --emptyOutDir"
+    "build:pages": "tsc && vite build --outDir play --emptyOutDir",
+    "build:android": "tsc && vite build --mode android --outDir android/app/src/main/assets/www --emptyOutDir",
+    "dev:android": "vite --mode android"
   },
   "devDependencies": {
     "@types/three": "^0.186.0",
@@ -16,6 +18,7 @@
   },
   "dependencies": {
     "@fontsource/press-start-2p": "^5.3.0",
+    "@fontsource/space-grotesk": "^5.3.0",
     "@fontsource/vt323": "^5.3.0",
     "three": "^0.186.0"
   }

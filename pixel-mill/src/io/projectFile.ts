@@ -1,6 +1,7 @@
 import { MAX_GRID, MIN_GRID, TOOL_BY_ID, VOXEL_MM, type ToolId } from "../config";
 import type { AppState } from "../state/store";
 import { VoxelGrid, type Dims } from "../voxel/VoxelGrid";
+import { bytesToBase64, nativeApi } from "../native/bridge";
 
 const FORMAT = "pixel-mill-project";
 
@@ -21,11 +22,6 @@ async function pipe(bytes: Uint8Array, stream: CompressionStream | Decompression
   return new Uint8Array(await new Response(out).arrayBuffer());
 }
 
-function toBase64(bytes: Uint8Array) {
-  let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
 
 function fromBase64(b64: string) {
   const s = atob(b64);
@@ -35,6 +31,12 @@ function fromBase64(b64: string) {
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
+  const native = nativeApi();
+  if (native) {
+    // Android WebView can't download blob: URLs; hand the bytes to the app, which saves to Downloads.
+    void blob.arrayBuffer().then((buf) => native.saveFile(filename, blob.type || "application/octet-stream", bytesToBase64(new Uint8Array(buf))));
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -54,7 +56,7 @@ export async function serializeProject(grid: VoxelGrid, state: AppState) {
     voxelMm: VOXEL_MM,
     dims: grid.dims,
     encoding: "deflate-raw+base64",
-    voxels: toBase64(packed),
+    voxels: bytesToBase64(packed),
     settings: {
       toolId: state.toolId,
       diameterIndex: state.diameterIndex,

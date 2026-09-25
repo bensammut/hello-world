@@ -18,6 +18,8 @@ export const PIXEL = {
 
 export const UNDO_LIMIT = 24;
 export const CHIP_PILE_MAX = 5000;
+/** three.js layer seen by the Glyph Matrix iso camera: stock chunks and its own lights only. */
+export const GLYPH_LAYER = 1;
 export const FLYING_CHIPS_MAX = 1600;
 export const MIST_MAX = 700;
 /** Per-frame time budget for remeshing dirty chunks. */
@@ -37,6 +39,10 @@ export const COLORS = {
   stock: "#a3adc2",
   stockCut: "#e4eaf3",
   background: "#151923",
+  skyLight: "#ccd4e2",
+  groundLight: "#1f2430",
+  keyLight: "#ffffff",
+  rimLight: "#7fdcff",
   cabinet: "#2a303e",
   cabinetDark: "#1f2430",
   table: "#545d71",

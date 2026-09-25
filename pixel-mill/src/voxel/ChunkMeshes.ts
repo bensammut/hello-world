@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { COLORS, VOXEL_MM } from "../config";
+import { COLORS, GLYPH_LAYER, VOXEL_MM } from "../config";
 import { meshChunk, type MaterialColors } from "./greedyMesher";
 import type { VoxelGrid } from "./VoxelGrid";
 
@@ -106,6 +106,7 @@ export class ChunkMeshes {
       existing.geometry = geo;
     } else {
       const mesh = new THREE.Mesh(geo, this.material);
+      mesh.layers.enable(GLYPH_LAYER);
       mesh.matrixAutoUpdate = false;
       this.meshes.set(id, mesh);
       this.group.add(mesh);

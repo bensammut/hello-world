@@ -33,7 +33,10 @@ export interface InputActions {
   blocked(): boolean; // dialogs open
 }
 
-type DragMode = "cut" | "orbit" | "pan" | null;
+type DragMode = "cut" | "orbit" | "pan" | "gesture" | null;
+
+/** Multi-touch camera gestures ship in the Android app only; the website keeps single-pointer input. */
+const TOUCH_GESTURES = import.meta.env.MODE === "android";
 
 const JOG_KEYS: Record<string, [number, number]> = {
   ArrowUp: [0, 1],
@@ -66,6 +69,9 @@ export class InputController {
   private a: InputActions;
   private jogKeys = new Set<string>();
   private keyCut = false;
+  /** Active touch points: one finger cuts, two orbit (drag) and zoom (pinch), three pan. */
+  private touches = new Map<number, { x: number; y: number }>();
+  private pinch = { dist: 0, cx: 0, cy: 0 };
 
   constructor(canvas: HTMLCanvasElement, actions: InputActions) {
     this.canvas = canvas;
@@ -140,8 +146,32 @@ export class InputController {
     return this.lockAxis === "x" ? [p.x, this.lockAnchor.y] : [this.lockAnchor.x, p.z];
   }
 
+  /** Spread of the first two fingers and the centroid of all of them. */
+  private touchPair() {
+    const pts = [...this.touches.values()];
+    const [a, b] = pts;
+    let cx = 0, cy = 0;
+    for (const p of pts) {
+      cx += p.x / pts.length;
+      cy += p.y / pts.length;
+    }
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y), cx, cy };
+  }
+
   private onDown = (e: PointerEvent) => {
     if (this.a.blocked()) return;
+    if (TOUCH_GESTURES && e.pointerType === "touch") {
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.touches.size >= 2) {
+        // Second finger: abandon the cut the first finger started and switch to camera gestures.
+        if (this.mode === "cut") this.a.retract();
+        this.mode = "gesture";
+        this.pinch = this.touchPair();
+        e.preventDefault();
+        return;
+      }
+      if (this.mode === "gesture") return;
+    }
     this.canvas.setPointerCapture(e.pointerId);
     this.lastX = e.clientX;
     this.lastY = e.clientY;
@@ -161,6 +191,22 @@ export class InputController {
   };
 
   private onMove = (e: PointerEvent) => {
+    if (TOUCH_GESTURES && e.pointerType === "touch" && this.touches.has(e.pointerId)) {
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.mode === "gesture") {
+        if (this.touches.size >= 3) {
+          const now = this.touchPair();
+          this.a.pan(now.cx - this.pinch.cx, now.cy - this.pinch.cy, this.canvas.clientHeight);
+          this.pinch = now;
+        } else if (this.touches.size === 2) {
+          const now = this.touchPair();
+          this.a.orbit(now.cx - this.pinch.cx, now.cy - this.pinch.cy);
+          this.a.zoom((this.pinch.dist - now.dist) * 4);
+          this.pinch = now;
+        }
+        return;
+      }
+    }
     const dx = e.clientX - this.lastX;
     const dy = e.clientY - this.lastY;
     this.lastX = e.clientX;
@@ -192,6 +238,15 @@ export class InputController {
   };
 
   private onUp = (e: PointerEvent) => {
+    if (TOUCH_GESTURES && e.pointerType === "touch") {
+      this.touches.delete(e.pointerId);
+      if (this.mode === "gesture") {
+        // Stay in gesture mode until every finger lifts, so a leftover finger never cuts.
+        if (this.touches.size === 0) this.mode = null;
+        else if (this.touches.size >= 2) this.pinch = this.touchPair();
+        return;
+      }
+    }
     if (this.mode === "cut") this.a.cutEnd();
     this.mode = null;
     if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);

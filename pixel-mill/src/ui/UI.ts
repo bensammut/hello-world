@@ -22,6 +22,8 @@ export interface UIActions {
   camera(name: CameraPresetName): void;
   blowChips(): void;
   toggleHelp(force?: boolean): void;
+  retract(): void;
+  nudgeDepth(steps: number): void;
   maxDepth(): number;
   currentStockMm(): [number, number, number];
 }
@@ -83,6 +85,8 @@ export class UI {
   private toastTimer = 0;
   private depthTag: HTMLElement;
   private live: Record<string, HTMLElement> = {};
+  /** CSS zoom applied to #ui on short screens; screen-space positions must be divided by it. */
+  private zoom = 1;
   private fileInput: HTMLInputElement;
   private act: UIActions;
 
@@ -96,6 +100,9 @@ export class UI {
     this.fileInput = $(host, "#file-input");
     for (const el of host.querySelectorAll<HTMLElement>("[data-live]")) this.live[el.dataset.live!] = el;
     this.bind();
+    const readZoom = () => (this.zoom = parseFloat(getComputedStyle(host).zoom) || 1);
+    window.addEventListener("resize", readZoom);
+    readZoom();
     store.subscribe((s) => this.render(s));
   }
 
@@ -253,6 +260,9 @@ export class UI {
         case "dia+": return this.act.stepDiameter(1);
         case "plunge": return this.act.togglePlunge();
         case "blow": return this.act.blowChips();
+        case "retract": return this.act.retract();
+        case "depth-": return this.act.nudgeDepth(-1);
+        case "depth+": return this.act.nudgeDepth(1);
       }
     });
     r.addEventListener("input", (e) => {
@@ -368,7 +378,7 @@ export class UI {
   showDepthTag(x: number, y: number, text: string, visible: boolean) {
     this.depthTag.hidden = !visible;
     if (!visible) return;
-    const t = `translate(${Math.round(x) + 14}px, ${Math.round(y) - 22}px)`;
+    const t = `translate(${Math.round(x / this.zoom) + 14}px, ${Math.round(y / this.zoom) - 22}px)`;
     if (this.depthTag.style.transform !== t) this.depthTag.style.transform = t;
     txt(this.depthTag, text);
   }

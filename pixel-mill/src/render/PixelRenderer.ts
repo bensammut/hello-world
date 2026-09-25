@@ -79,11 +79,14 @@ const blitFrag = /* glsl */ `
  * Renders the scene into a small render target, quantises it to the palette at
  * that resolution, then upscales to the canvas by an integer factor.
  */
+const PORTRAIT_FOV = import.meta.env.MODE === "android";
+
 export class PixelRenderer {
   readonly renderer: THREE.WebGLRenderer;
   lowW = 320;
   lowH = 180;
   scale = 1;
+  private baseFov: number | undefined;
   private sceneTarget!: THREE.WebGLRenderTarget;
   private quantTarget!: THREE.WebGLRenderTarget;
   private quantMat: THREE.ShaderMaterial;
@@ -149,6 +152,12 @@ export class PixelRenderer {
     this.quantTarget = new THREE.WebGLRenderTarget(this.lowW, this.lowH, { ...opts, depthBuffer: false });
 
     camera.aspect = this.lowW / this.lowH;
+    if (PORTRAIT_FOV) {
+      // Android portrait: widen the vertical FOV so a tall screen sees the same horizontal span.
+      this.baseFov ??= camera.fov;
+      const half = (this.baseFov * Math.PI) / 360;
+      camera.fov = camera.aspect < 1 ? Math.min(80, (Math.atan(Math.tan(half) / camera.aspect) * 360) / Math.PI) : this.baseFov;
+    }
     camera.updateProjectionMatrix();
   }
 

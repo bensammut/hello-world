@@ -77,6 +77,7 @@ class PointPool {
   commit() {
     const g = this.points.geometry;
     g.setDrawRange(0, this.count);
+    this.points.visible = this.count > 0; // an empty draw call makes WebGL warn every frame
     (g.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     (g.attributes.aColor as THREE.BufferAttribute).needsUpdate = true;
     (g.attributes.aSize as THREE.BufferAttribute).needsUpdate = true;

@@ -1,3 +1,5 @@
+import { nativeApi, onNative } from "../native/bridge";
+
 export const PENDANT_SERVICE = "7e5a0001-6c1d-4b5e-9a3b-2f1c0d9e8a70";
 export const PENDANT_STATE = "7e5a0002-6c1d-4b5e-9a3b-2f1c0d9e8a70";
 
@@ -14,6 +16,7 @@ export class HardwareController {
   private device: any = null;
   private button: HTMLButtonElement;
   private lastButtons = 0;
+  private native = nativeApi();
 
   constructor(uiRoot: HTMLElement) {
     this.button = document.createElement("button");
@@ -25,7 +28,11 @@ export class HardwareController {
       bottom: "calc(56px + env(safe-area-inset-bottom, 0px))",
       zIndex: "20", pointerEvents: "auto", fontSize: "10px", padding: "8px 10px",
     });
-    if (!(navigator as any).bluetooth) {
+    if (this.native) {
+      // Android app: Bluetooth runs natively (WebView has no Web Bluetooth) and pushes packets here.
+      onNative("onPendantState", (s) => this.onNativeState(s));
+      onNative("onPendantPacket", (bytes) => this.parse(new DataView(Uint8Array.from(bytes).buffer)));
+    } else if (!(navigator as any).bluetooth) {
       this.button.textContent = "NO BLUETOOTH";
       this.button.disabled = true;
     }
@@ -34,6 +41,11 @@ export class HardwareController {
   }
 
   async connect() {
+    if (this.native) {
+      this.button.textContent = "SCANNING...";
+      this.native.pendantConnect();
+      return;
+    }
     const bt = (navigator as any).bluetooth;
     if (!bt) return;
     try {
@@ -55,8 +67,26 @@ export class HardwareController {
   }
 
   disconnect() {
+    if (this.native) this.native.pendantDisconnect();
     if (this.device?.gatt?.connected) this.device.gatt.disconnect();
     this.handleDisconnect();
+  }
+
+  private onNativeState(state: string) {
+    if (state === "scanning") this.button.textContent = "SCANNING...";
+    else if (state === "connecting") this.button.textContent = "PAIRING...";
+    else if (state === "connected") {
+      this.connected = true;
+      this.button.textContent = "PENDANT ON";
+      this.button.style.color = "var(--green)";
+    } else {
+      this.handleDisconnect();
+      const why: Record<string, string> = { timeout: "NOT FOUND", denied: "NO PERMISSION", "bluetooth-off": "BLUETOOTH OFF" };
+      if (why[state]) {
+        this.button.textContent = why[state];
+        setTimeout(() => !this.connected && (this.button.textContent = "CONNECT PENDANT"), 2500);
+      }
+    }
   }
 
   private handleDisconnect() {

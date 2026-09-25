@@ -6,6 +6,7 @@ import {
 import { SoundEngine } from "./audio/SoundEngine";
 import { Particles } from "./effects/Particles";
 import { HardwareController } from "./input/HardwareController";
+import { GlyphFeed } from "./native/GlyphFeed";
 import { InputController } from "./input/InputController";
 import { downloadBlob, loadProject, saveProject } from "./io/projectFile";
 import { exportStl } from "./io/stlExport";
@@ -45,6 +46,7 @@ export class App {
   private hw: HardwareController;
   private hwDown = false;
   private hwZ = 0;
+  private glyph: GlyphFeed;
   private canvas: HTMLCanvasElement;
 
   private assemblies = {} as Record<ToolId, THREE.Group>;
@@ -74,6 +76,7 @@ export class App {
     this.mounted = this.store.state.toolId;
 
     this.buildScene();
+    this.glyph = new GlyphFeed(this.scene);
     for (const t of TOOLS) {
       this.assemblies[t.id] = buildToolAssembly(t, t.diameters[this.store.state.diameterIndex[t.id]]);
       if (t.id === this.mounted) this.mount(t.id);
@@ -112,10 +115,10 @@ export class App {
   private buildScene() {
     const s = this.scene;
     s.background = new THREE.Color(COLORS.background);
-    s.add(new THREE.HemisphereLight("#ccd4e2", "#1f2430", 1.25));
-    const key = new THREE.DirectionalLight("#ffffff", 2.7);
+    s.add(new THREE.HemisphereLight(COLORS.skyLight, COLORS.groundLight, 1.25));
+    const key = new THREE.DirectionalLight(COLORS.keyLight, 2.7);
     key.position.set(-90, 300, 130);
-    const rim = new THREE.DirectionalLight("#7fdcff", 0.7);
+    const rim = new THREE.DirectionalLight(COLORS.rimLight, 0.7);
     rim.position.set(220, 90, -160);
     s.add(key, rim);
     s.add(this.machine.root, this.chunks.group, this.particles.group, this.ghost.group);
@@ -409,6 +412,10 @@ export class App {
       camera: (n) => this.setCamera(n),
       blowChips: () => this.blowChips(),
       toggleHelp: (f) => this.toggleHelp(f),
+      retract: () => {
+        if (!this.changer.active) this.motion.retract();
+      },
+      nudgeDepth: (steps) => this.setDepth(this.store.state.depth + steps * LIMITS.depthStep),
       maxDepth: () => this.maxDepth(),
       currentStockMm: () => [this.layout.size.x, this.layout.size.y, this.layout.size.z],
     };
@@ -571,6 +578,7 @@ export class App {
     this.machine.root.updateMatrixWorld();
 
     const tipWorld = this.tmp2.copy(head).setY(head.y - this.spec.stickout);
+    this.glyph.update(dt, this.pixel.renderer, this.scene, L, tipWorld);
     if (this.cutHold > 0 && this.rpmActual > 1000) {
       const nozzle = this.machine.nozzleWorld(new THREE.Vector3());
       this.particles.spawnMist(nozzle, tipWorld, 5);

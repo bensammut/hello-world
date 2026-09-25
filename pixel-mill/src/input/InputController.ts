@@ -26,11 +26,28 @@ export interface InputActions {
   toggleHelp(force?: boolean): void;
   blowChips(): void;
   toggleSound(): void;
+  keyCutStart(): void;
+  keyCutEnd(): void;
+  retract(): void;
   escape(): void;
   blocked(): boolean; // dialogs open
 }
 
 type DragMode = "cut" | "orbit" | "pan" | null;
+
+const JOG_KEYS: Record<string, [number, number]> = {
+  ArrowUp: [0, 1],
+  ArrowDown: [0, -1],
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+};
+
+/** Held arrow keys as a screen-space direction (x right, y up). */
+export interface JogInput {
+  x: number;
+  y: number;
+  fine: boolean;
+}
 
 export class InputController {
   private mode: DragMode = null;
@@ -47,6 +64,8 @@ export class InputController {
   private lastPointer: PointerEvent | null = null;
   private canvas: HTMLCanvasElement;
   private a: InputActions;
+  private jogKeys = new Set<string>();
+  private keyCut = false;
 
   constructor(canvas: HTMLCanvasElement, actions: InputActions) {
     this.canvas = canvas;
@@ -62,12 +81,31 @@ export class InputController {
     window.addEventListener("keydown", this.onKey);
     window.addEventListener("keyup", (e) => {
       if (e.key === "Shift") this.setShift(false);
+      this.jogKeys.delete(e.key);
+      if (e.key === "Enter") this.endKeyCut();
     });
     window.addEventListener("blur", () => {
       this.setShift(false);
+      this.jogKeys.clear();
+      this.endKeyCut();
       if (this.mode === "cut") this.a.cutEnd();
       this.mode = null;
     });
+  }
+
+  jog(): JogInput {
+    let x = 0, y = 0;
+    for (const k of this.jogKeys) {
+      x += JOG_KEYS[k][0];
+      y += JOG_KEYS[k][1];
+    }
+    return { x, y, fine: this.shift };
+  }
+
+  private endKeyCut() {
+    if (!this.keyCut) return;
+    this.keyCut = false;
+    this.a.keyCutEnd();
   }
 
   /** Project a pointer onto the horizontal cutting plane. */
@@ -212,6 +250,19 @@ export class InputController {
       if (!e.repeat) this.a.togglePlunge();
       return;
     }
+    if (e.key in JOG_KEYS) {
+      e.preventDefault();
+      this.jogKeys.add(e.key);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!e.repeat && !this.keyCut) {
+        this.keyCut = true;
+        this.a.keyCutStart();
+      }
+      return;
+    }
     const tool = TOOLS.find((tt) => String(tt.slot) === e.key);
     if (tool) return this.a.selectTool(tool.id);
     switch (e.key) {
@@ -227,6 +278,7 @@ export class InputController {
       case "i": return this.a.cameraPreset("iso");
       case "b": return this.a.blowChips();
       case "m": return this.a.toggleSound();
+      case "r": return this.a.retract();
     }
   };
 }

@@ -50,6 +50,8 @@ export class MotionController {
   private grid!: VoxelGrid;
   private layout!: Layout;
   private pts: number[] = [];
+  /** Horizontal speed cap while jogging from the keyboard (0 = not jogging). */
+  private jogSpeed = 0;
 
   constructor(grid: VoxelGrid, layout: Layout) {
     this.reset(grid, layout);
@@ -102,6 +104,7 @@ export class MotionController {
   }
 
   press(x: number, z: number, toolRadius: number) {
+    this.jogSpeed = 0;
     this.pressed = true;
     this.holdAtSafe = false;
     const [cx, cz] = this.clampTarget(x, z);
@@ -124,6 +127,30 @@ export class MotionController {
 
   release() {
     this.pressed = false;
+  }
+
+  /** Keyboard jog: keep a single waypoint a short lead ahead of the tool so it stops promptly on release. */
+  jog(dirX: number, dirZ: number, speed: number) {
+    this.jogSpeed = speed;
+    const lead = Math.max(0.3, speed * 0.12);
+    const [cx, cz] = this.clampTarget(this.tip.x + dirX * lead, this.tip.z + dirZ * lead);
+    this.clearQueue();
+    this.enqueue(cx, cz);
+  }
+
+  stopJog() {
+    this.jogSpeed = 0;
+    this.clearQueue();
+    this.target.set(this.tip.x, 0, this.tip.z);
+  }
+
+  /** Lift to retract height at rapid and stay there until the next press. */
+  retract() {
+    this.stopJog();
+    this.pressed = false;
+    this.holdAtSafe = true;
+    this.approach = false;
+    this.plunging = false;
   }
 
   /** Stop, drop the pending path and lift straight up without cutting. */
@@ -179,7 +206,8 @@ export class MotionController {
 
     const feedS = inp.feed / 60;
     const inAir = tip.y >= L.top - 1e-3;
-    const hSpeed = inAir ? Math.max(MACHINE.rapidSpeed, feedS) : feedS;
+    let hSpeed = inAir ? Math.max(MACHINE.rapidSpeed, feedS) : feedS;
+    if (this.jogSpeed > 0) hSpeed = Math.min(hSpeed, this.jogSpeed);
     const goingDown = wantY < tip.y;
     const vSpeed = goingDown ? (tip.y > L.top + 0.5 ? MACHINE.rapidSpeed : feedS * MACHINE.plungeFactor) : MACHINE.rapidSpeed;
 

@@ -26,6 +26,10 @@ push `play/`.
 | Shift + drag | Lock to a straight line along X or Y |
 | Wheel | Depth, 0.5 mm steps (also `-` / `=` and the DEPTH slider) |
 | Space | Toggle plunge mode: the tool drops to depth only while the button is held |
+| Arrow keys | Jog the tool along the machine X/Y axis closest to that screen direction (60 mm/s in air, feed rate in material) |
+| Shift + arrows | Fine jog (20% speed) |
+| Enter (hold) | Lower the tool to depth and cut, like holding the left mouse button |
+| `R` | Retract the tool to safe height |
 | Right drag / Alt + drag | Orbit camera |
 | Middle drag / Alt + Shift + drag | Pan camera |
 | Ctrl + wheel / pinch | Zoom |

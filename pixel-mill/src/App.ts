@@ -39,6 +39,8 @@ export class App {
   private ghost = new GhostCursor();
   private sound = new SoundEngine();
   private ui: UI;
+  private input: InputController;
+  private jogging = false;
   private canvas: HTMLCanvasElement;
 
   private assemblies = {} as Record<ToolId, THREE.Group>;
@@ -78,7 +80,7 @@ export class App {
     this.rig.preset("iso", true);
 
     this.ui = new UI(root.querySelector("#ui") as HTMLElement, this.store, this.uiActions());
-    new InputController(this.canvas, this.inputActions());
+    this.input = new InputController(this.canvas, this.inputActions());
 
     const resize = () => {
       // DPR can change without a size change (browser zoom, moving screens).
@@ -439,6 +441,15 @@ export class App {
         this.toggleHelp(false);
         this.ui.closeNewStock();
       },
+      keyCutStart: () => {
+        if (this.changer.active) return;
+        this.motion.press(this.motion.tip.x, this.motion.tip.z, this.diameter / 2);
+      },
+      keyCutEnd: () => this.motion.release(),
+      retract: () => {
+        if (this.changer.active) return;
+        this.motion.retract();
+      },
       blocked: () => this.store.state.helpOpen || this.ui.dialogOpen,
     };
   }
@@ -469,6 +480,7 @@ export class App {
     let removed = 0;
     let moving = false;
 
+    this.updateJog();
     if (this.changer.active) this.changer.update(dt);
     if (this.changer.active) {
       head.copy(this.changer.head);
@@ -570,10 +582,37 @@ export class App {
     }
   }
 
+  /** Arrow keys jog along the machine axis closest to the pressed screen direction. */
+  private updateJog() {
+    const j = this.input.jog();
+    const active = (j.x !== 0 || j.y !== 0) && !this.changer.active && !this.store.state.helpOpen && !this.ui.dialogOpen;
+    if (!active) {
+      if (this.jogging) this.motion.stopJog();
+      this.jogging = false;
+      return;
+    }
+    this.jogging = true;
+    const m = this.rig.camera.matrixWorld.elements;
+    const snap = (x: number, z: number): [number, number] =>
+      Math.abs(x) >= Math.abs(z) ? [Math.sign(x), 0] : [0, Math.sign(z)];
+    // Camera right (column 0) and forward-on-ground (-column 2, falling back to up for top-down views).
+    const right = snap(m[0], m[2]);
+    const fwd = Math.abs(m[8]) + Math.abs(m[10]) > 0.2 ? snap(-m[8], -m[10]) : snap(m[4], m[6]);
+    let dx = right[0] * j.x + fwd[0] * j.y;
+    let dz = right[1] * j.x + fwd[1] * j.y;
+    const len = Math.hypot(dx, dz);
+    if (len === 0) return;
+    dx /= len;
+    dz /= len;
+    const inMaterial = this.motion.tip.y < this.layout.top;
+    const speed = (inMaterial ? this.store.state.feed / 60 : 60) * (j.fine ? 0.2 : 1);
+    this.motion.jog(dx, dz, speed);
+  }
+
   private updateGhost(depth: number) {
     const L = this.layout;
     const m = this.motion;
-    const dragging = m.pressed;
+    const dragging = m.pressed || this.jogging;
     const show = (this.hover.on || dragging) && !this.changer.active;
     const x = dragging ? m.target.x : this.hover.x;
     const z = dragging ? m.target.z : this.hover.z;

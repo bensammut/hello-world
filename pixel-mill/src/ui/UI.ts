@@ -53,6 +53,10 @@ const SHORTCUTS: [string, string][] = [
   ["SHIFT+DRAG", "Lock to a straight line (X or Y)"],
   ["WHEEL", "Depth (0.5 mm steps)"],
   ["SPACE", "Toggle plunge mode"],
+  ["ARROWS", "Jog tool along X / Y (relative to the view)"],
+  ["SHIFT+ARROWS", "Fine jog"],
+  ["ENTER (HOLD)", "Lower tool to depth / cut, like holding LMB"],
+  ["R", "Retract tool"],
   ["RMB DRAG / ALT+DRAG", "Orbit camera"],
   ["MMB DRAG / ALT+SHIFT+DRAG", "Pan camera"],
   ["CTRL+WHEEL / PINCH", "Zoom"],
@@ -183,7 +187,7 @@ export class UI {
     </section>
 
     <div class="panel cams">${cams}</div>
-    <div class="hint">LMB CUT · SHIFT LINE · WHEEL DEPTH · SPACE PLUNGE · RMB ORBIT · MMB PAN · CTRL+WHEEL ZOOM · ? HELP</div>
+    <div class="hint">LMB CUT · ARROWS JOG · ENTER CUT · WHEEL DEPTH · SPACE PLUNGE · RMB ORBIT · MMB PAN · CTRL+WHEEL ZOOM · ? HELP</div>
 
     <div id="warn" class="warn"><div data-live="warnText">VISE COLLISION</div></div>
     <div id="depth-tag" class="depth-tag"></div>

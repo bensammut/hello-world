@@ -6,9 +6,9 @@
      ink / ink-dim                              printed labels on the body
      key / key-hi / key-lo / key-label          dark keys and their bevel
      lcd / seg-ghost / seg-on                   display glass, unlit and lit segments
-     orange (+hi/lo)                            selected tool, active mode (the only UI accent)
+     accent (+hi/lo)                            blue: selected tool, active mode (the only UI accent)
      vermilion                                  cutting dot, collision, errors
-     blue                                       tool change in progress
+     seg-on / seg-glow                          lit display beads and their bar (tool change blinks white)
    ========================================================================== */
 :root.pm-android {
   --paper: #eeefec;
@@ -21,14 +21,14 @@
   --key-hi: #3f3f3d;
   --key-lo: #121211;
   --key-label: #f2f2ee;
-  --lcd: #0b0b0b;
-  --seg-ghost: #262626;
-  --seg-on: #f4f4f0;
-  --orange: #e8643a;
-  --orange-hi: #f28a64;
-  --orange-lo: #b1431f;
+  --lcd: #07090b;
+  --seg-ghost: #121a22;
+  --seg-on: #cfe6ff;
+  --seg-glow: #3d6f9e;
+  --accent: #2f73b5;
+  --accent-hi: #5b93bd;
+  --accent-lo: #1c4a7a;
   --vermilion: #e03c2c;
-  --blue: #5b93bd;
 
   --sans: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
   /* Type scale: micro labels, body, title (numbers go on the segment display). */
@@ -42,9 +42,11 @@
   --gap: 6px;
   --edge: 8px;
   --safe-t: env(safe-area-inset-top, 0px);
-  --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
-  --safe-l: env(safe-area-inset-left, 0px);
+  /* Side insets are deliberately ignored: in landscape both rails sit the same distance from the
+     screen edges (the small punch-hole camera may overlap the left rail's edge). */
+  --safe-r: 0px;
+  --safe-l: 0px;
 }
 
 /* ---------- Base: no scrolling, pull-to-refresh, selection or tap flashes ---------- */
@@ -107,22 +109,22 @@
 }
 .pm-android .ko-key.on,
 .pm-android .ko-key.active {
-  background: var(--orange);
-  color: var(--ink);
-  box-shadow: inset 0 2px 0 var(--orange-hi), inset 0 -3px 0 var(--orange-lo);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: inset 0 2px 0 var(--accent-hi), inset 0 -3px 0 var(--accent-lo);
 }
 .pm-android .ko-count {
-  color: var(--orange-hi);
+  color: var(--accent-hi);
   font-weight: 700;
 }
 .pm-android .ko-key.on .ko-count {
-  color: var(--ink);
+  color: #fff;
 }
 .pm-android #pendant-btn {
   color: var(--key-label) !important;
 }
 .pm-android #pendant-btn.on {
-  color: var(--ink) !important;
+  color: #fff !important;
 }
 .pm-android .ko-right .ko-pendant {
   grid-column: 1 / -1;
@@ -159,10 +161,10 @@
   letter-spacing: 0.12em;
 }
 .pm-android .ko-tool.active {
-  --ti-cut: var(--orange);
+  --ti-cut: var(--accent);
 }
 .pm-android .ko-tool.active .n {
-  color: var(--ink);
+  color: #fff;
 }
 
 /* ---------- Chassis rails ---------- */
@@ -231,11 +233,21 @@
   width: auto;
 }
 .pm-android .seg line {
-  stroke: var(--seg-ghost);
-  stroke-width: 1.7;
   stroke-linecap: round;
 }
-.pm-android .seg line.on {
+.pm-android .seg .bar {
+  stroke: var(--seg-ghost);
+  stroke-width: 2.1;
+}
+.pm-android .seg .bead {
+  stroke: none;
+  stroke-width: 1.15;
+  stroke-dasharray: 0 1.45;
+}
+.pm-android .seg .on .bar {
+  stroke: var(--seg-glow);
+}
+.pm-android .seg .on .bead {
   stroke: var(--seg-on);
 }
 .pm-android .seg circle {
@@ -254,11 +266,12 @@
 .pm-android .ko-blk.white {
   background: var(--seg-on);
 }
-.pm-android .ko-blk.orange {
-  background: var(--orange);
+.pm-android .ko-blk.accent {
+  background: var(--accent);
+  color: #fff;
 }
-.pm-android .ko-blk.blue {
-  background: var(--blue);
+.pm-android .ko-blk.change {
+  background: var(--seg-on);
 }
 .pm-android .ko-blk.out {
   outline: 1.5px solid var(--vermilion);
@@ -394,7 +407,7 @@
   height: 28px;
   margin-top: -11px;
   border: 0;
-  border-top: 3px solid var(--orange);
+  border-top: 3px solid var(--accent);
   border-radius: 3px;
   background: var(--key);
   box-shadow: inset 0 -2px 0 var(--key-lo);

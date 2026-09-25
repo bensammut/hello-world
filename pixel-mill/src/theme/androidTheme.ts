@@ -10,7 +10,7 @@ const KO_PALETTE = [
   "#0b0b0b", "#161615", "#222221", "#2e2e2c", "#3b3b39", "#4a4a47", "#5b5b58", "#6e6e6a",
   "#83837e", "#989893", "#adada8", "#c2c2bd", "#d6d6d1", "#e8e8e3", "#f4f4f0", "#ffffff",
   "#7f8488", "#9a9fa3", "#b4b9bc", "#cfd3d5",
-  "#e8643a", "#f28a64", "#b1431f", "#e03c2c", "#9e2a1f",
+  "#2f73b5", "#7fb4e2", "#1c4a7a", "#e03c2c", "#9e2a1f",
   "#5b93bd", "#8db7d6", "#3b6687", "#c24a8e", "#8a3363", "#d9a07a", "#a8764f",
 ];
 
@@ -29,8 +29,8 @@ const KO_COLORS: Partial<typeof COLORS> = {
   rail: "#83837e",
   gantry: "#d6d6d1",
   gantryLight: "#c2c2bd",
-  accent: "#e8643a",
-  accentDark: "#b1431f",
+  accent: "#2f73b5",
+  accentDark: "#1c4a7a",
   spindle: "#2e2e2c",
   spindleLight: "#5b5b58",
   steel: "#989893",
@@ -41,20 +41,20 @@ const KO_COLORS: Partial<typeof COLORS> = {
   viseLight: "#4a4a47",
   jaw: "#989893",
   glass: "#f4f4f0",
-  screen: "#e8643a",
+  screen: "#2f73b5",
   red: "#e03c2c",
   green: "#f4f4f0",
-  amber: "#e8643a",
+  amber: "#2f73b5",
   chip: ["#ffffff", "#f4f4f0", "#cfd3d5", "#b4b9bc", "#9a9fa3"],
   mist: ["#8db7d6", "#f4f4f0", "#5b93bd"],
-  ghost: "#e8643a",
-  ghostIdle: "#b1431f",
+  ghost: "#7fb4e2",
+  ghostIdle: "#2f73b5",
 };
 
 // Rack rings take the display's block colours, so each tool's key and ring share a colour.
 const KO_TOOL_COLORS: Record<ToolId, string> = {
-  flat: "#e8643a",
-  ball: "#5b93bd",
+  flat: "#2f73b5",
+  ball: "#8db7d6",
   vbit: "#d9a07a",
   drill: "#e03c2c",
   face: "#c24a8e",

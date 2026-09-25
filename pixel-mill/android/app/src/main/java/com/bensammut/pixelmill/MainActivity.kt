@@ -66,13 +66,17 @@ class MainActivity : Activity(), PendantBle.Listener {
             addJavascriptInterface(NativeBridge(this@MainActivity, pendant, glyph), "PixelMillNative")
         }
 
-        // Keep the UI clear of the camera cutout; the page itself fills the rest edge to edge.
+        // Clear the camera cutout only at the top/bottom (portrait status strip). In landscape the
+        // page runs to both side edges so the two rails sit symmetrically.
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
         val root = FrameLayout(this).apply {
             setBackgroundColor(getColor(R.color.ground))
             addView(web)
             setOnApplyWindowInsetsListener { v, insets ->
                 val cut = insets.getInsets(WindowInsets.Type.displayCutout())
-                v.setPadding(cut.left, cut.top, cut.right, cut.bottom)
+                v.setPadding(0, cut.top, 0, cut.bottom)
                 insets
             }
         }

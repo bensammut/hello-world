@@ -25,7 +25,7 @@ export function mountAndroidLayer(store: Store) {
       <div class="ko-lcd ko-depth">
         <div class="ko-row" data-ko="status"></div>
         <div class="ko-big"><span data-ko="depth"></span><span class="ko-unit">MM</span></div>
-        <div class="ko-row"><span class="ko-blk orange" data-ko="tool">FLAT</span><span data-ko="dia"></span><span class="ko-grow"></span><span data-ko="rpm"></span></div>
+        <div class="ko-row"><span class="ko-blk tool" data-ko="tool">FLAT</span><span data-ko="dia"></span><span class="ko-grow"></span><span data-ko="rpm"></span></div>
       </div>
       <div class="ko-silk">DEPTH</div>
       <button class="ko-key" data-act="depth-" data-ko="k-up">UP</button>
@@ -91,7 +91,7 @@ export function mountAndroidLayer(store: Store) {
     misc.appendChild(b);
   }
   // HardwareController injects its button into #ui. Keep it one tap away: bottom of the right rail
-  // in landscape, right end of the status strip in portrait. It turns orange while connected.
+  // in landscape, right end of the status strip in portrait. It lights up (accent) while connected.
   const pendant = document.getElementById("pendant-btn");
   if (pendant) {
     pendant.removeAttribute("style");
@@ -137,7 +137,7 @@ export function mountAndroidLayer(store: Store) {
     switch (state) {
       case "CUTTING": return `<span class="ko-dot"></span><span>CUT</span>`;
       case "TRAVEL": return `<span class="ko-dot off"></span><span>MOVE</span>`;
-      case "TOOL CHANGE": return `<span class="ko-blk blue ko-blink">TOOL</span><span>${detail.replace(/[^0-9]/g, "") || ""}%</span>`;
+      case "TOOL CHANGE": return `<span class="ko-blk change ko-blink">TOOL</span><span>${detail.replace(/[^0-9]/g, "") || ""}%</span>`;
       case "COLLISION": return `<span class="ko-blk out ko-blink">VISE</span>${compact ? "" : "<span class=\"ko-red\">COLLISION</span>"}`;
       default: return `<span class="ko-dot off"></span><span class="ko-blk white">READY</span>`;
     }
@@ -160,9 +160,9 @@ export function mountAndroidLayer(store: Store) {
     const key = `${s.status}|${statusDetail}|${plunge}|${tool.slot}`;
     if (key !== lastStatus) {
       lastStatus = key;
-      const extra = `<span class="ko-grow"></span><span class="ko-blk ${plunge ? "orange" : "ghost"}">${tool.plungeOnly ? "DRILL" : "PLUNGE"}</span><span class="ko-blk white">T${tool.slot}</span>`;
+      const extra = `<span class="ko-grow"></span><span class="ko-blk ${plunge ? "accent" : "ghost"}">${tool.plungeOnly ? "DRILL" : "PLUNGE"}</span><span class="ko-blk white">T${tool.slot}</span>`;
       $("status").innerHTML = statusHtml(s.status, statusDetail, true) + extra;
-      $("status-top").innerHTML = `<div class="ko-row">${statusHtml(s.status, statusDetail, false)}<span class="ko-blk orange" style="background:${tool.color}">${tool.short}</span>${extra}</div>`;
+      $("status-top").innerHTML = `<div class="ko-row">${statusHtml(s.status, statusDetail, false)}<span class="ko-blk tool" style="background:${tool.color}">${tool.short}</span>${extra}</div>`;
     }
   };
   store.subscribe(render);
